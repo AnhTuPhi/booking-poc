@@ -1,61 +1,34 @@
 package com.example.bookingpoc.seat.service;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
-import java.util.UUID;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * In-memory soft-hold store. In production this would be Redis SETNX with TTL —
- * Caffeine asMap().putIfAbsent gives us the same atomic check-and-set semantics
- * locally so the POC stays single-process but the logic is identical.
+ * Single-key check-and-set with TTL for soft seat holds.
+ *
+ * <p>Two implementations:
+ * <ul>
+ *   <li>{@link CaffeineSoftHoldStore} — in-process; default. Single JVM only.
+ *   <li>{@link RedisSoftHoldStore} — cross-node; activate with
+ *       {@code booking.seat.hold-store=redis} for multi-pod / multi-VM deployments.
+ * </ul>
+ *
+ * <p>The contract is the same as Redis {@code SET key value NX PX ttl}:
+ * exactly one concurrent caller wins {@link #tryAcquire}; losers see
+ * {@code Optional.empty()}. Consume is compare-and-delete by token —
+ * implementations MUST be atomic so a TTL-expired key isn't accidentally
+ * deleted from a subsequent owner.
  */
-@Component
-public class SoftHoldStore {
+public interface SoftHoldStore {
 
-    public record SoftHold(Long seatId, String customerId, String token, Instant expiresAt) {}
+    record SoftHold(Long seatId, String customerId, String token, Instant expiresAt) {}
 
-    private final Cache<Long, SoftHold> cache;
-    private final Duration ttl;
+    Optional<SoftHold> tryAcquire(Long seatId, String customerId);
 
-    public SoftHoldStore(@Value("${booking.seat.soft-hold-ttl-seconds:300}") long ttlSeconds) {
-        this.ttl = Duration.ofSeconds(ttlSeconds);
-        this.cache = Caffeine.newBuilder()
-                .expireAfterWrite(ttl)
-                .maximumSize(100_000)
-                .build();
-    }
+    Optional<SoftHold> peek(Long seatId);
 
-    public Optional<SoftHold> tryAcquire(Long seatId, String customerId) {
-        String token = UUID.randomUUID().toString();
-        SoftHold candidate = new SoftHold(seatId, customerId, token, Instant.now().plus(ttl));
-        SoftHold existing = cache.asMap().putIfAbsent(seatId, candidate);
-        return existing == null ? Optional.of(candidate) : Optional.empty();
-    }
+    boolean consume(Long seatId, String token);
 
-    public Optional<SoftHold> peek(Long seatId) {
-        return Optional.ofNullable(cache.getIfPresent(seatId));
-    }
-
-    public boolean consume(Long seatId, String token) {
-        AtomicBoolean removed = new AtomicBoolean(false);
-        cache.asMap().computeIfPresent(seatId, (k, hold) -> {
-            if (hold.token().equals(token)) {
-                removed.set(true);
-                return null;
-            }
-            return hold;
-        });
-        return removed.get();
-    }
-
-    public Duration getTtl() {
-        return ttl;
-    }
+    Duration getTtl();
 }

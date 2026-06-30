@@ -1,3 +1,13 @@
+-- ShedLock table — harmless when scheduler.distributed=false.
+-- ShedLock will use this table to coordinate sweepers across replicas.
+CREATE TABLE IF NOT EXISTS shedlock (
+  name VARCHAR(64) NOT NULL,
+  lock_until TIMESTAMP(3) NOT NULL,
+  locked_at TIMESTAMP(3) NOT NULL,
+  locked_by VARCHAR(255) NOT NULL,
+  PRIMARY KEY (name)
+);
+
 -- Seat reservation seed data --------------------------------------------------
 INSERT INTO seats (id, code, type, resource_id, status, version) VALUES
   (1, '12A', 'FLIGHT_SEAT', 'VN201', 'AVAILABLE', 0),
