@@ -2,6 +2,8 @@
 
 Three booking/reservation patterns in one Spring Boot 3.4 + Java 21 app, backed by H2 and an in-memory Caffeine cache. No infra to install — `mvn spring-boot:run` and open `http://localhost:8080/`.
 
+> Companion docs: [`docs/TECHNICAL.md`](docs/TECHNICAL.md) for the *why* (key tech, trade-offs, tech debt, design system, error codes) and [`flows.html`](src/main/resources/static/flows.html) for state + sequence diagrams.
+
 | Pattern | Endpoint root | Demo page |
 |---|---|---|
 | **17. Seat hold (hotel / flight)** | `/api/seats` | [`/seat.html`](src/main/resources/static/seat.html) |
